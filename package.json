@@ -13,6 +13,11 @@
     "doxxing"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://gitlab.com/devopscoop/eat-the-pii.git"
+  },
+  "homepage": "https://gitlab.com/devopscoop/eat-the-pii",
   "type": "module",
   "exports": {
     ".": {
