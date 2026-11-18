@@ -1,0 +1,38 @@
+{
+  "name": "@devopscoop/eat-the-pii",
+  "version": "0.1.0",
+  "description": "Find phone numbers, emails, handles, and other personal info in user-written text, in the browser or Node.",
+  "keywords": [
+    "pii",
+    "privacy",
+    "personal information",
+    "phone",
+    "email",
+    "redact",
+    "detect",
+    "doxxing"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    }
+  },
+  "files": [
+    "src",
+    "LICENSE",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "libphonenumber-js": "1.13.16"
+  }
+}
