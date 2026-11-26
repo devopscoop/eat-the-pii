@@ -38,6 +38,6 @@
     "test": "node --test"
   },
   "dependencies": {
-    "libphonenumber-js": "1.13.16"
+    "libphonenumber-js": "1.13.17"
   }
 }
