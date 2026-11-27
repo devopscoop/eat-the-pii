@@ -57,15 +57,31 @@ export function normalize(original) {
 
 const ranges = (text, re, keep = () => true) => [...text.matchAll(re)].filter(keep).map(m => [m.index, m.index + m[0].length]);
 
-// Email, including spelled-out forms: "jane at gmail dot com", "jane [at] gmail (dot) com".
-const DOT = String.raw`(?:\s*\.\s*|\s*[\[(]\s*dot\s*[\])]\s*|\s+dot\s+)`;
-const DOMAIN = String.raw`[a-z0-9-]+(?:${DOT}[a-z0-9-]+)*${DOT}([a-z]{2,24})(?![\w@])`;
-const LOCAL = String.raw`[a-z0-9][a-z0-9._%+-]*`;
-const EMAIL = new RegExp(String.raw`${LOCAL}(?:\s*@\s*|\s*[\[(]\s*at\s*[\])]\s*)${DOMAIN}`, 'gi');
-// A plain " at " ("meet at Balboa Park dot...") only counts with a real-looking top-level domain.
-const EMAIL_PLAIN_AT = new RegExp(String.raw`${LOCAL}\s+at\s+${DOMAIN}`, 'gi');
+// Email, including spelled-out forms with any separator around "at" and "dot": "jane at gmail dot com",
+// "jane [at] gmail (dot) com", "jane-at-gmail-dot-com", "jane_at_gmail.com".
+// A separator is any run of characters that aren't letters or digits: spaces, dots, dashes, underscores, brackets...
+const SEP = String.raw`[^a-z0-9]+`;
+// Domain labels can't be the word "dot" (nor have a "-dot" part), so "x-dot-y" splits only one way. Without that,
+// the regex could try every split and take exponential time on long text.
+const NOT_DOT = String.raw`(?!dot(?![a-z0-9]))`;
+const LABEL = String.raw`${NOT_DOT}[a-z0-9]+(?:-${NOT_DOT}[a-z0-9]+)*`;
+const DOT = String.raw`(?:\s*\.\s*|${SEP}dot${SEP})`;
+const DOMAIN = String.raw`${LABEL}(?:${DOT}${LABEL})*${DOT}([a-z]{2,24})(?![\w@])`;
+// Starts at the beginning of a word, so the regex doesn't retry from every character of a long one.
+const LOCAL = String.raw`(?<![a-z0-9._%+-])[a-z0-9](?:[a-z0-9._%+-]*[a-z0-9])?`;
+const EMAIL = new RegExp(String.raw`${LOCAL}(?:\s*@\s*|${SEP}?[\[(]\s*at\s*[\])]${SEP}?)${DOMAIN}`, 'gi');
+// A plain "at" ("meet at Balboa Park dot...") only counts with a real-looking top-level domain.
+const EMAIL_PLAIN_AT = new RegExp(String.raw`${LOCAL}${SEP}at${SEP}${DOMAIN}`, 'gi');
+// The separator standing in for the dot too ("jane-at-gmail-com"), only with no spaces anywhere and a real-looking
+// top-level domain, so sentences like "I'm at home me and you" pass. Labels have no dashes here (a dash is always
+// a separator), for the same reason labels can't be "dot".
+const TIGHT = String.raw`[^\sa-z0-9]+`;
+const BARE_DOT = String.raw`${TIGHT}(?:dot${TIGHT})?`;
+const BARE_LABEL = String.raw`${NOT_DOT}[a-z0-9]+`;
+const EMAIL_BARE = new RegExp(String.raw`${LOCAL}${TIGHT}at${TIGHT}${BARE_LABEL}(?:${BARE_DOT}${BARE_LABEL})*${BARE_DOT}([a-z]{2,24})(?![a-z0-9@])`, 'gi');
 const COMMON_TLDS = new Set(['com', 'net', 'org', 'edu', 'gov', 'io', 'me', 'co', 'us', 'uk', 'ca', 'de', 'fr', 'info', 'app', 'dev', 'mail', 'email']);
-const email = (text) => [...ranges(text, EMAIL), ...ranges(text, EMAIL_PLAIN_AT, m => COMMON_TLDS.has(m[1].toLowerCase()))];
+const commonTld = (m) => COMMON_TLDS.has(m[1].toLowerCase());
+const email = (text) => [...ranges(text, EMAIL), ...ranges(text, EMAIL_PLAIN_AT, commonTld), ...ranges(text, EMAIL_BARE, commonTld)];
 
 // Links to social, messaging, and payment profiles.
 const PROFILE_DOMAINS = ['instagram.com', 'instagr.am', 'tiktok.com', 'snapchat.com', 't.me', 'telegram.me', 'wa.me', 'whatsapp.com',
@@ -98,7 +114,8 @@ function luhn(digits) {
   }
   return sum % 10 === 0;
 }
-const CARD = /(?<![\d-])\d(?:[ -]?\d){12,18}(?![\d-])/g;
+// Any separator but commas, which group the digits of big plain numbers ("1,234,567,890,123 views").
+const CARD = /(?<![\d-])\d(?:[^A-Za-z0-9,]?\d){12,18}(?![\d-])/g;
 const card = (text) => ranges(text, CARD, m => { const d = m[0].replace(/\D/g, ''); return luhn(d) && !/^(\d)\1+$/.test(d); });
 
 // IBANs: country code, check digits, and up to 30 letters and digits, that pass the mod-97 check.
@@ -111,20 +128,31 @@ function mod97(iban) {
 const IBAN = /\b[a-z]{2}\d{2}(?: ?[a-z0-9]){11,30}\b/gi;
 const iban = (text) => ranges(text, IBAN, m => mod97(m[0].replace(/ /g, '')));
 
-// US Social Security numbers: 123-45-6789 or 123 45 6789, skipping numbers the SSA never issues.
-const SSN = /(?<![\d-])(?!000|666|9\d\d)\d{3}([- ])(?!00)\d{2}\1(?!0000)\d{4}(?![\d-])/g;
+// US Social Security numbers: 123-45-6789, 123 45 6789, 123.45.6789 (any separator, the same one twice), skipping
+// numbers the SSA never issues.
+const SSN = /(?<![\d-])(?!000|666|9\d\d)\d{3}([^A-Za-z0-9])(?!00)\d{2}\1(?!0000)\d{4}(?![\d-])/g;
 const ssn = (text) => ranges(text, SSN);
 
 // Phone numbers, in every country's format, via libphonenumber-js. Numbers written without a country code are read
 // as each of `countries` in turn.
-const phone = (text, { countries }) => countries.flatMap(defaultCountry =>
-  findPhoneNumbersInText(text, { defaultCountry, v2: true }).map(f => [f.startsAt, f.endsAt]));
+// libphonenumber-js only knows the usual punctuation, so other separators ("619_555_0123", "619~555~0123") become
+// spaces first, one for one, so positions don't move.
+const PHONE_OTHER_SEPARATORS = /[^\p{L}\p{N}\s+()\-.\/]/gu;
+const phone = (text, { countries }) => {
+  const spaced = text.replace(PHONE_OTHER_SEPARATORS, m => ' '.repeat(m.length));
+  return countries.flatMap(defaultCountry =>
+    findPhoneNumbersInText(spaced, { defaultCountry, v2: true }).map(f => [f.startsAt, f.endsAt]));
+};
 
 // Street addresses (English-style): "1234 Elm St", "500 N. Harbor Drive", "Apt 5B".
 const STREET_TYPES = String.raw`st|street|ave|avenue|blvd|boulevard|rd|road|dr|drive|ln|lane|ct|court|way|pl|place|ter|terrace|pkwy|parkway|cir|circle|hwy|highway`;
 const STREET = new RegExp(String.raw`(?<![\d.,:$])\b\d{1,6}\s+(?:[nsew]\.?\s+)?(?:[a-z0-9'.-]+\s+){0,3}(?:${STREET_TYPES})\b\.?`, 'gi');
-const UNIT = /\b(?:apt|apartment|unit|suite|ste)\.?\s*#?\s*\d+[a-z]?\b/gi;
-const address = (text) => [...ranges(text, STREET), ...ranges(text, UNIT)];
+// The same with any separators and no spaces ("1234-elm-st", "500.n.harbor.dr"). It needs a name word before the
+// street type, so "a 2-lane road" and "the 4-way stop" pass.
+const STREET_TIGHT = new RegExp(String.raw`(?<![\w.,:$-])\d{1,6}[^\sa-z0-9]+(?:[nsew][^\sa-z0-9]+)?(?:[a-z0-9']+[^\sa-z0-9]+){1,3}(?:${STREET_TYPES})(?![a-z0-9])`, 'gi');
+// Any separator, or none, between the word and the number: "Apt 5B", "apt-5b", "unit_12", "Suite #200".
+const UNIT = /(?<![a-z0-9])(?:apt|apartment|unit|suite|ste)[^a-z0-9]*\d+[a-z]?(?![a-z0-9])/gi;
+const address = (text) => [...ranges(text, STREET), ...ranges(text, STREET_TIGHT), ...ranges(text, UNIT)];
 
 // In priority order: when two findings overlap, the earlier type wins.
 const DETECTORS = { email, link, handle, card, iban, ssn, phone, address };

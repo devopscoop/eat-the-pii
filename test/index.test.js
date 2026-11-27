@@ -9,6 +9,20 @@ const CATCH = [
   ['jane [at] gmail (dot) com', 'email', 'jane [at] gmail (dot) com'],
   ['write to jane at gmail dot com', 'email', 'jane at gmail dot com'],
   ['ＪＡＮＥ＠ＧＭＡＩＬ．ＣＯＭ', 'email', 'ＪＡＮＥ＠ＧＭＡＩＬ．ＣＯＭ'],
+  // Any separator around "at" and "dot": the way people sneak an email into a username.
+  ['me-at-gmail-dot-com', 'email', 'me-at-gmail-dot-com'],
+  ['me.at.gmail.dot.com', 'email', 'me.at.gmail.dot.com'],
+  ['me_at_gmail_dot_com', 'email', 'me_at_gmail_dot_com'],
+  ['me~at~gmail~dot~com', 'email', 'me~at~gmail~dot~com'],
+  ['jane.doe-at-gmail-dot-com', 'email', 'jane.doe-at-gmail-dot-com'],
+  ['jane at mail-server dot co dot uk', 'email', 'jane at mail-server dot co dot uk'],
+  ['jane_[at]_gmail_(dot)_com', 'email', 'jane_[at]_gmail_(dot)_com'],
+  ['jane-at-gmail.com', 'email', 'jane-at-gmail.com'],
+  ['ME-AT-GMAIL-DOT-COM', 'email', 'ME-AT-GMAIL-DOT-COM'],
+  // The separator standing in for the dot, with no spaces and a common top-level domain.
+  ['me-at-gmail-com', 'email', 'me-at-gmail-com'],
+  ['me_at_proton_me', 'email', 'me_at_proton_me'],
+  ['me.at.gmail.com', 'email', 'me.at.gmail.com'],
   ['call 619-555-0123', 'phone', '619-555-0123'],
   ['(619) 555 0123 after 5', 'phone', '(619) 555 0123'],
   ['text 6195550123', 'phone', '6195550123'],
@@ -34,12 +48,30 @@ const CATCH = [
   ['I live at 1234 Elm St, come by', 'address', '1234 Elm St'],
   ['500 N. Harbor Drive', 'address', '500 N. Harbor Drive'],
   ['buzz Apt 5B', 'address', 'Apt 5B'],
+  // Any separator between the parts of other types too.
+  ['619_555_0123', 'phone', '619_555_0123'],
+  ['619~555~0123', 'phone', '619~555~0123'],
+  ['123.45.6789', 'ssn', '123.45.6789'],
+  ['123_45_6789', 'ssn', '123_45_6789'],
+  ['4111.1111.1111.1111', 'card', '4111.1111.1111.1111'],
+  ['4111_1111_1111_1111', 'card', '4111_1111_1111_1111'],
+  ['apt-5b', 'address', 'apt-5b'],
+  ['my_unit_12', 'address', 'unit_12'],
+  ['1234-elm-st', 'address', '1234-elm-st'],
+  ['1234_elm_street', 'address', '1234_elm_street'],
+  ['500.n.harbor.dr', 'address', '500.n.harbor.dr'],
 ];
 
 // Text that must produce no findings at all.
 const PASS = [
   '$25 a bowl', 'since 1972', '7:30-9pm', 'up to 22 people', 'AP Bio', 'Arena México', '2000 piece TV console',
   'Meet @5pm by the fountain', 'meet @ the park', 'Meet at Balboa Park', 'tiktok is fun', 'see you at 7',
+  // Usernames and phrases that contain "at" or "dot" without being an email.
+  'bob.atkins', 'cat-dotcom', 'jane-doe', 'pat_at_home', 'look-at-me', 'great_dot', 'at-dot-com', 'dot.matrix.fan',
+  "I'm at home me and you", 'meet at the park. Me too', 'Meet at Balboa Park - me and Sam', 'at the beach, com on',
+  // Hyphenated numbers that look a bit like addresses, and usernames with digits.
+  'a 2-lane road', 'the 4-way stop', '3-court complex', 'route_66', 'agent.007', 'player_2024', 'sk8er-boi', 'paste1',
+  'Prices: 1,234,567,890,123 views',
   '2026-11-17 19:30', '12/25/2026', 'Entry is $5 each', 'Mile 13.1', 'one or two people', 'Someone has to bring nine chairs',
   'I said yes to the sleepover. I did not say I would be there for it. Wine bar, two hours, phones face down.',
   // Bored's example posts.
@@ -95,6 +127,14 @@ test('defaultCountry: numbers without a country code', () => {
   assert.deepEqual(findPii('03-1234-5678'), []);
   assert.equal(findPii('03-1234-5678', { defaultCountry: 'JP' })[0]?.type, 'phone');
   assert.equal(findPii('03-1234-5678', { defaultCountry: ['US', 'JP'] })[0]?.type, 'phone');
+});
+
+test('long separator-heavy text stays fast', () => {
+  for (const text of ['a-'.repeat(5000) + 'at', 'a-at-'.repeat(2000) + 'b', 'x.dot.'.repeat(2000), 'me at '.repeat(2000) + 'gmail']) {
+    const t = performance.now();
+    findPii(text);
+    assert.ok(performance.now() - t < 500, `${text.slice(0, 12)}… took ${Math.round(performance.now() - t)} ms`);
+  }
 });
 
 test('empty and non-string input', () => {

@@ -1,6 +1,6 @@
 {
   "name": "@devopscoop/eat-the-pii",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Find phone numbers, emails, handles, and other personal info in user-written text, in the browser or Node.",
   "keywords": [
     "pii",

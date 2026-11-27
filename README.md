@@ -10,7 +10,7 @@ both places: in the browser to warn people as they type, and on the server to en
 
 | Type | Examples | Default |
 |---|---|---|
-| `email` | `jane@gmail.com`, `jane [at] gmail (dot) com`, `jane at gmail dot com` | block |
+| `email` | `jane@gmail.com`, `jane [at] gmail (dot) com`, `jane at gmail dot com`, `jane-at-gmail-dot-com`, `jane_at_gmail.com`, `jane.at.gmail.com` | block |
 | `link` | `instagram.com/jane`, `t.me/jane`, `wa.me/16195550123`, and other social, messaging, and payment profiles | block |
 | `handle` | `@jane_doe`, `IG: janedoe`, `my snap is jane.doe99` | block |
 | `card` | 13 to 19 digits that pass the Luhn check | block |
@@ -19,7 +19,9 @@ both places: in the browser to warn people as they type, and on the server to en
 | `phone` | Any country's format, via [libphonenumber-js](https://www.npmjs.com/package/libphonenumber-js) | block |
 | `address` | `1234 Elm St`, `500 N. Harbor Drive`, `Apt 5B` (English-style only) | warn |
 
-Before matching, it normalizes the text, so these get caught too: full-width and other scripts' digits (`６１９`),
+Parts can be separated by anything that isn't a letter or digit: spaces, dashes, dots, underscores, and so on
+(`me-at-gmail-dot-com`, `619_555_0123`, `123.45.6789`, `1234-elm-st`). Before matching, it normalizes the text,
+so these get caught too: full-width and other scripts' digits (`６１９`),
 English number words (`six one nine`), and letters standing in for digits (`6l9-555-O123`).
 
 ## Use
@@ -63,6 +65,12 @@ the one bare import:
 - A plain `my insta is janedoe` isn't caught, because `tiktok is fun` looks the same. `IG: janedoe`,
   `@janedoe`, and `my insta is jane.doe99` are caught.
 - A bare `@word` is treated as a handle, except times like `@5pm`, so `I'll be @home` is a false alarm.
+- Spelled-out emails can use any separator (spaces, dashes, dots, underscores, or anything else that isn't a letter
+  or digit) around `at` and `dot`. A plain `at`, without `@` or brackets, only counts with a common top-level domain
+  such as `com`. With no `dot` at all (`jane-at-gmail-com`), the text also can't contain spaces. Text with no
+  separators (`janeatgmaildotcom`) isn't caught.
+- A street address with no spaces (`1234-elm-st`) needs a name word before the street type, so `a 2-lane road`
+  passes. Card numbers can't be grouped with commas, so big plain numbers like `1,234,567,890,123` pass.
 
 ## Development
 
